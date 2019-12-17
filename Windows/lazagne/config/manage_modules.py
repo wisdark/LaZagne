@@ -39,11 +39,12 @@ from lazagne.softwares.sysadmin.apachedirectorystudio import ApacheDirectoryStud
 from lazagne.softwares.sysadmin.coreftp import CoreFTP
 from lazagne.softwares.sysadmin.cyberduck import Cyberduck
 from lazagne.softwares.sysadmin.filezilla import Filezilla
+from lazagne.softwares.sysadmin.filezillaserver import FilezillaServer
 from lazagne.softwares.sysadmin.ftpnavigator import FtpNavigator
 from lazagne.softwares.sysadmin.opensshforwindows import OpenSSHForWindows
 from lazagne.softwares.sysadmin.openvpn import OpenVPN
 from lazagne.softwares.sysadmin.iiscentralcertp import IISCentralCertP
-
+from lazagne.softwares.sysadmin.keepassconfig import KeePassConfig
 from lazagne.softwares.sysadmin.iisapppool import IISAppPool
 from lazagne.softwares.sysadmin.puttycm import Puttycm
 from lazagne.softwares.sysadmin.rdpmanager import RDPManager
@@ -139,7 +140,9 @@ def get_modules():
         CoreFTP(),
         Cyberduck(),
         Filezilla(),
+        FilezillaServer(),
         FtpNavigator(),
+        KeePassConfig(),
         Puttycm(),
         OpenSSHForWindows(),
         OpenVPN(),

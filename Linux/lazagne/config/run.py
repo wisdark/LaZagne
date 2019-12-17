@@ -2,6 +2,7 @@
 # !/usr/bin/python
 import getpass
 import traceback
+from collections import OrderedDict
 
 from lazagne.config.write_output import print_debug, StandardOutput
 from lazagne.config.constant import constant
@@ -60,8 +61,11 @@ def run_modules(category_selected, subcategories):
     Run modules
     """
     modules = create_module_dic()
-    categories = [category_selected] if category_selected != 'all' else get_categories()
-    for cat in categories:
+    categories = {category_selected: get_categories()[category_selected]} \
+        if category_selected != 'all' else get_categories()
+
+    # Sort dict in reverse mode to run libsecrets as first module
+    for cat in OrderedDict(reversed(sorted(categories.items(), key=lambda t: t[0]))):
         for r in run_module(modules[cat], subcategories):
             yield r
 

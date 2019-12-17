@@ -11,6 +11,8 @@ from lazagne.config.constant import constant
 from platform import uname
 from time import gmtime, strftime
 
+from collections import OrderedDict
+
 
 class Bcolors():
     HEADER = '\033[95m'
@@ -143,7 +145,7 @@ class StandardOutput():
             to_write = []
 
             # Remove duplicated password
-            pwd_found = [dict(t) for t in set([tuple(d.items()) for d in pwd_found])]
+            pwd_found = [OrderedDict(t) for t in set([tuple(d.items()) for d in pwd_found])]
 
             for pwd in pwd_found:
                 password_category = False
@@ -202,7 +204,7 @@ class StandardOutput():
             # Write credentials into a text file
             self.checks_write(to_write, software_name)
         else:
-            print_debug("INFO", "No passwords found")
+            print_debug("INFO", "No passwords found\n")
 
 
 def print_debug(error_level, message):

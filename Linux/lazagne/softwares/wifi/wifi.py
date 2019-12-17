@@ -11,6 +11,8 @@ try:
 except ImportError:
     from configparser import RawConfigParser  # Python 3
 
+from collections import OrderedDict
+
 
 class Wifi(ModuleInfo):
     def __init__(self):
@@ -27,7 +29,7 @@ class Wifi(ModuleInfo):
                 for w in wireless_ssid:
                     cp = RawConfigParser()
                     cp.read(os.path.join(directory, w))
-                    values = {}
+                    values = OrderedDict()
                     try:
                         values['SSID'] = cp.get('wifi', 'ssid')
                         values['Password'] = cp.get('wifi-security', 'psk')
@@ -38,4 +40,4 @@ class Wifi(ModuleInfo):
             else:
                 self.info('You need sudo privileges')
 
-                return pwd_found
+            return pwd_found
