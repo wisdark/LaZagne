@@ -184,9 +184,7 @@ class VAULT_ITEM_DATA(Structure):
     _fields_ = [
         # ('schemaElementId',   DWORD),
         # ('unk0',              DWORD),
-        # ('Type',              VAULT_ELEMENT_TYPE),
-        # ('type',              Flag),
-        # ('type',              DWORD * 14),
+        # ('Type',              DWORD),
         # ('unk1',              DWORD),
         ('data', DATA),
     ]
@@ -195,6 +193,7 @@ class VAULT_ITEM_DATA(Structure):
 PVAULT_ITEM_DATA = POINTER(VAULT_ITEM_DATA)
 
 
+# From https://github.com/gentilkiwi/mimikatz/blob/b008188f9fe5668b5dae80c210290c7efa872ffa/mimikatz/modules/kuhl_m_vault.h#L157
 class VAULT_ITEM_WIN8(Structure):
     _fields_ = [
         ('id', GUID),
@@ -202,7 +201,7 @@ class VAULT_ITEM_WIN8(Structure):
         ('pResource', PVAULT_ITEM_DATA),
         ('pUsername', PVAULT_ITEM_DATA),
         ('pPassword', PVAULT_ITEM_DATA),
-        ('unknown0', PVAULT_ITEM_DATA),
+        ('pPackageSid', PVAULT_ITEM_DATA),
         ('LastWritten', FILETIME),
         ('Flags', DWORD),
         ('cbProperties', DWORD),
@@ -213,19 +212,22 @@ class VAULT_ITEM_WIN8(Structure):
 PVAULT_ITEM_WIN8 = POINTER(VAULT_ITEM_WIN8)
 
 
-# class VAULT_ITEM_WIN7(Structure):
-#   _fields_ = [
-#       ('id',              GUID),
-#       ('pName',           PWSTR),
-#       ('pResource',       PVAULT_ITEM_DATA),
-#       ('pUsername',       PVAULT_ITEM_DATA),
-#       ('pPassword',       PVAULT_ITEM_DATA),
-#       ('LastWritten',     FILETIME),
-#       ('Flags',           DWORD),
-#       ('cbProperties',    DWORD),
-#       ('Properties',      PVAULT_ITEM_DATA),
-#   ]
-# PVAULT_ITEM_WIN7 = POINTER(VAULT_ITEM_WIN7)
+# From https://github.com/gentilkiwi/mimikatz/blob/b008188f9fe5668b5dae80c210290c7efa872ffa/mimikatz/modules/kuhl_m_vault.h#L145
+class VAULT_ITEM_WIN7(Structure):
+  _fields_ = [
+      ('id',              GUID),
+      ('pName',           PWSTR),
+      ('pResource',       PVAULT_ITEM_DATA),
+      ('pUsername',       PVAULT_ITEM_DATA),
+      ('pPassword',       PVAULT_ITEM_DATA),
+      ('LastWritten',     FILETIME),
+      ('Flags',           DWORD),
+      ('cbProperties',    DWORD),
+      ('Properties',      PVAULT_ITEM_DATA),
+  ]
+
+
+PVAULT_ITEM_WIN7 = POINTER(VAULT_ITEM_WIN7)
 
 class OSVERSIONINFOEXW(Structure):
     _fields_ = [
@@ -393,10 +395,6 @@ CredFree = advapi32.CredFree
 CredFree.restype = PVOID
 CredFree.argtypes = [PVOID]
 
-memcpy = cdll.msvcrt.memcpy
-memcpy.restype = PVOID
-memcpy.argtypes = [PVOID]
-
 LocalFree = kernel32.LocalFree
 LocalFree.restype = HANDLE
 LocalFree.argtypes = [HANDLE]
@@ -421,14 +419,46 @@ try:
                             POINTER(PVAULT_ITEM_WIN8))
     vaultGetItem8 = prototype(("VaultGetItem", windll.vaultcli))
 
-    # prototype = WINFUNCTYPE(ULONG, HANDLE, LPGUID, PVAULT_ITEM_DATA, PVAULT_ITEM_DATA, HWND, DWORD, POINTER(PVAULT_ITEM_WIN7))
-    # vaultGetItem7 = prototype(("VaultGetItem", windll.vaultcli))
+    prototype = WINFUNCTYPE(ULONG, HANDLE, LPGUID, PVAULT_ITEM_DATA, PVAULT_ITEM_DATA, HWND, DWORD, POINTER(PVAULT_ITEM_WIN7))
+    vaultGetItem7 = prototype(("VaultGetItem", windll.vaultcli))
 
     prototype = WINFUNCTYPE(ULONG, LPVOID)
     vaultFree = prototype(("VaultFree", windll.vaultcli))
 
     prototype = WINFUNCTYPE(ULONG, PHANDLE)
     vaultCloseVault = prototype(("VaultCloseVault", windll.vaultcli))
+
+    def get_vault_objects_for_this_version_of_windows():
+        """
+        @return: Tuple[
+                        Type of vault item,
+                        Pointer to type of vault item,
+                        VaultGetItem function as Callable[[vault_handle, vault_item_prt, password_vault_item_ptr], int]
+                       ]
+        """
+        os_version_float = float(get_os_version())
+        if os_version_float == 6.1:
+            #  Windows 7
+            return (
+                VAULT_ITEM_WIN7,
+                PVAULT_ITEM_WIN7,
+                lambda hVault, pVaultItem, pPasswordVaultItem:
+                        vaultGetItem7(hVault, byref(pVaultItem.id), pVaultItem.pResource, pVaultItem.pUsername,
+                                      None, 0, byref(pPasswordVaultItem))
+            )
+        elif os_version_float > 6.1:
+            #  Later than Windows7
+            return (
+                VAULT_ITEM_WIN8,
+                PVAULT_ITEM_WIN8,
+                lambda hVault, pVaultItem, pPasswordVaultItem:
+                        vaultGetItem8(hVault, byref(pVaultItem.id), pVaultItem.pResource, pVaultItem.pUsername,
+                                      pVaultItem.pPackageSid,  # additional parameter compared to Windows 7
+                                      None, 0, byref(pPasswordVaultItem))
+            )
+
+        raise Exception("Vault is not supported for this version of OS")
+
 except Exception:
     pass
 
@@ -535,11 +565,10 @@ def RtlAdjustPrivilege(privilege_id):
 
 
 def getData(blobOut):
-    cbData = int(blobOut.cbData)
+    cbData = blobOut.cbData
     pbData = blobOut.pbData
-    buffer = c_buffer(cbData)
-
-    memcpy(buffer, pbData, cbData)
+    buffer = create_string_buffer(cbData)
+    memmove(buffer, pbData, sizeof(buffer))
     LocalFree(pbData);
     return buffer.raw
 
@@ -580,11 +609,11 @@ def Win32CryptUnprotectData(cipherText, entropy=False, is_current_user=True, use
             blobEntropy = DATA_BLOB(len(entropy), bufferEntropy)
 
             if CryptUnprotectData(byref(blobIn), None, byref(blobEntropy), None, None, 0, byref(blobOut)):
-                decrypted = getData(blobOut).decode("utf-8")
+                decrypted = getData(blobOut)
 
         else:
             if CryptUnprotectData(byref(blobIn), None, None, None, None, 0, byref(blobOut)):
-                decrypted = getData(blobOut).decode("utf-8")
+                decrypted = getData(blobOut)
 
     if not decrypted:
         can_decrypt = True
