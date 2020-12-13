@@ -134,29 +134,31 @@ class ChromiumBased(ModuleInfo):
                     # Passwords are stored using AES-256-GCM algorithm
                     # The key used to encrypt is stored on the credential manager
 
-                    # yandex_enckey: 
-                    #   - 4 bytes should be removed to be 256 bits 
-                    #   - these 4 bytes correspond to the nonce ? 
+                    # yandex_enckey:
+                    #   - 4 bytes should be removed to be 256 bits
+                    #   - these 4 bytes correspond to the nonce ?
 
                     # cipher = AES.new(yandex_enckey, AES.MODE_GCM)
                     # plaintext = cipher.decrypt(password)
                     # Failed...
                 else:
                     # Decrypt the Password
-                    try:
-                        password_bytes = Win32CryptUnprotectData(password, is_current_user=constant.is_current_user,
-                                                                user_dpapi=constant.user_dpapi)
-                    except AttributeError:
+                    if password and password.startswith(b'v10'):  # chromium > v80
+                        if master_key:
+                            password = self._decrypt_v80(password, master_key)
+                    else:
                         try:
                             password_bytes = Win32CryptUnprotectData(password, is_current_user=constant.is_current_user,
-                                                                 user_dpapi=constant.user_dpapi)
-                        except:
-                            password_bytes = None
+                                                                    user_dpapi=constant.user_dpapi)
+                        except AttributeError:
+                            try:
+                                password_bytes = Win32CryptUnprotectData(password, is_current_user=constant.is_current_user,
+                                                                     user_dpapi=constant.user_dpapi)
+                            except:
+                                password_bytes = None
 
-                    if password_bytes is not None:
-                        password = password_bytes.decode("utf-8")
-                    elif master_key:
-                        password = self._decrypt_v80(password, master_key)
+                        if password_bytes not in [None, False]:
+                            password = password_bytes.decode("utf-8")
 
                 if not url and not login and not password:
                     continue
@@ -228,6 +230,7 @@ chromium_browsers = [
     (u'chedot', u'{LOCALAPPDATA}\\Chedot\\User Data'),
     (u'chrome canary', u'{LOCALAPPDATA}\\Google\\Chrome SxS\\User Data'),
     (u'chromium', u'{LOCALAPPDATA}\\Chromium\\User Data'),
+    (u'chromium edge', u'{LOCALAPPDATA}\\Microsoft\\Edge\\User Data'),
     (u'coccoc', u'{LOCALAPPDATA}\\CocCoc\\Browser\\User Data'),
     (u'comodo dragon', u'{LOCALAPPDATA}\\Comodo\\Dragon\\User Data'),  # Comodo IceDragon is Firefox-based
     (u'elements browser', u'{LOCALAPPDATA}\\Elements Browser\\User Data'),
